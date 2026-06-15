@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="BVL Institutional Risk & Portfolio Dashboard — GARCH-Boostrap Monte Carlo Engine">
+    <title>BVL Risk Engine · Institutional Quant Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+<!-- ======= LOADER ======= -->
+<div id="loader" class="loader-overlay">
+    <div class="loader-inner">
+        <div class="loader-logo">BVL<span>QUANT</span></div>
+        <div class="loader-bar-wrap"><div class="loader-bar" id="loaderBar"></div></div>
+        <div class="loader-status" id="loaderStatus">Initializing quant engine...</div>
+    </div>
+</div>
+
+<!-- ======= APP ======= -->
+<div id="app" class="app" style="opacity:0">
+
+    <!-- TOPBAR -->
+    <header class="topbar">
+        <div class="topbar-brand">
+            <div class="brand-badge">BVL</div>
+            <div class="brand-text">
+                <span class="brand-name">Risk Engine</span>
+                <span class="brand-sub">Institutional Quant Platform</span>
+            </div>
+        </div>
+
+        <nav class="topbar-center">
+            <button class="nav-tab active" data-panel="overview">Overview</button>
+            <button class="nav-tab" data-panel="risk">Risk Analytics</button>
+            <button class="nav-tab" data-panel="montecarlo">Monte Carlo</button>
+        </nav>
+
+        <div class="topbar-right">
+            <div class="status-pill" id="statusPill">
+                <span class="status-dot"></span>
+                <span id="statusText">LIVE</span>
+            </div>
+            <div class="topbar-time" id="clockDisplay">--:--:--</div>
+        </div>
+    </header>
+
+    <!-- CONTROL BAR -->
+    <div class="control-bar glass-card">
+        <div class="control-group">
+            <label class="ctrl-label">CONFIDENCE LEVEL (1 - α)</label>
+            <div class="segmented" id="confidenceGroup">
+                <button class="seg-btn" data-val="0.90">90%</button>
+                <button class="seg-btn active" data-val="0.95">95%</button>
+                <button class="seg-btn" data-val="0.99">99%</button>
+            </div>
+        </div>
+        <div class="ctrl-divider"></div>
+        <div class="control-group">
+            <label class="ctrl-label">CAPITAL BASE (PEN)</label>
+            <div class="ctrl-input-wrap">
+                <span class="ctrl-prefix">S/.</span>
+                <input type="number" id="capitalBase" value="3200" step="1000" min="1000">
+            </div>
+        </div>
+        <div class="ctrl-divider"></div>
+        <div class="control-group">
+            <label class="ctrl-label">ENGINE CONFIG</label>
+            <div class="ctrl-tags">
+                <span class="ctrl-tag">GARCH(1,1)</span>
+                <span class="ctrl-tag">10K PATHS</span>
+                <span class="ctrl-tag">20D HORIZON</span>
+                <span class="ctrl-tag">SLSQP</span>
+            </div>
+        </div>
+        <button id="runBtn" class="run-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            RUN SIMULATION
+        </button>
+    </div>
+
+    <!-- PANELS -->
+    <main class="panels-wrap">
+
+        <!-- ===== PANEL: OVERVIEW ===== -->
+        <section class="panel active" id="panel-overview">
+
+            <!-- KPI STRIP -->
+            <div class="kpi-strip">
+                <div class="kpi-card" id="kpi-capital">
+                    <div class="kpi-header">
+                        <span class="kpi-label">CAPITAL</span>
+                        <span class="kpi-badge gold">PEN</span>
+                    </div>
+                    <div class="kpi-value gold-val" id="kpi-v-capital">--</div>
+                    <div class="kpi-sub">Investable equity</div>
+                </div>
+                <div class="kpi-card" id="kpi-return">
+                    <div class="kpi-header">
+                        <span class="kpi-label">RETORNO (20D)</span>
+                        <span class="kpi-badge" id="kpi-b-return">—</span>
+                    </div>
+                    <div class="kpi-value gradient" id="kpi-v-return">--</div>
+                    <div class="kpi-sub">Proyección Monte Carlo</div>
+                </div>
+                <div class="kpi-card" id="kpi-vol">
+                    <div class="kpi-header">
+                        <span class="kpi-label">VOLATILIDAD</span>
+                        <span class="kpi-badge warn">ANN</span>
+                    </div>
+                    <div class="kpi-value gradient" id="kpi-v-vol">--</div>
+                    <div class="kpi-sub">Desv. estándar anualizada</div>
+                </div>
+                <div class="kpi-card" id="kpi-var">
+                    <div class="kpi-header">
+                        <span class="kpi-label">VALUE AT RISK</span>
+                        <span class="kpi-badge danger" id="kpi-b-var">95%</span>
+                    </div>
+                    <div class="kpi-value danger" id="kpi-v-var">--</div>
+                    <div class="kpi-sub">Pérdida máx. al nivel conf.</div>
+                </div>
+                <div class="kpi-card featured" id="kpi-cvar">
+                    <div class="kpi-header">
+                        <span class="kpi-label">CVaR · EXP. SHORTFALL</span>
+                        <span class="kpi-badge danger" id="kpi-b-cvar">95%</span>
+                    </div>
+                    <div class="kpi-value danger" id="kpi-v-cvar">--</div>
+                    <div class="kpi-sub">Pérdida esperada en cola</div>
+                </div>
+                <div class="kpi-card" id="kpi-sharpe">
+                    <div class="kpi-header">
+                        <span class="kpi-label">SHARPE RATIO</span>
+                        <span class="kpi-badge" id="kpi-b-sharpe">—</span>
+                    </div>
+                    <div class="kpi-value gradient" id="kpi-v-sharpe">--</div>
+                    <div class="kpi-sub">Retorno ajustado al riesgo</div>
+                </div>
+            </div>
+
+            <!-- MAIN GRID -->
+            <div class="main-grid">
+                <!-- Allocation -->
+                <div class="glass-card chart-card span-5">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-dot blue"></span>
+                            OPTIMAL ALLOCATION
+                        </div>
+                        <div class="card-meta">CVaR-Minimizing Weights · SLSQP</div>
+                    </div>
+                    <div class="donut-layout">
+                        <div id="chart-donut" class="chart-area donut-area"></div>
+                        <div class="weights-table-wrap">
+                            <table class="weights-table" id="weightsTable">
+                                <thead>
+                                    <tr>
+                                        <th>ASSET</th>
+                                        <th>WEIGHT</th>
+                                        <th>ALLOCATION</th>
+                                        <th>BAR</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="weightsTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Efficient Frontier & GARCH bar -->
+                <div class="glass-card chart-card span-7">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-dot green"></span>
+                            ASSET RISK PROFILE
+                        </div>
+                        <div class="card-meta">Avg GARCH Conditional Volatility vs. Historical Return</div>
+                    </div>
+                    <div id="chart-scatter" class="chart-area"></div>
+                </div>
+
+                <!-- Correlation heatmap -->
+                <div class="glass-card chart-card span-12">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-dot purple"></span>
+                            RETURN CORRELATION MATRIX
+                        </div>
+                        <div class="card-meta">Pearson — Daily Log Returns · 5Y Window</div>
+                    </div>
+                    <div id="chart-corr" class="chart-area" style="height:340px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PANEL: RISK ANALYTICS ===== -->
+        <section class="panel" id="panel-risk">
+            <div class="main-grid">
+                <!-- Asset selector -->
+                <div class="glass-card chart-card span-3">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot orange"></span>GARCH AUDIT</div>
+                    </div>
+                    <div class="asset-list" id="assetList"></div>
+                    <div class="garch-params" id="garchParams">
+                        <div class="params-header" id="garchParamsHeader" style="margin-bottom: 12px; font-size: 11px; color: #8A9BB5; text-align: center; background: rgba(255,255,255,0.03); padding: 6px; border-radius: 4px;"></div>
+                        <div class="params-grid" id="paramsGrid"></div>
+                    </div>
+                </div>
+                <!-- Conditional volatility -->
+                <div class="glass-card chart-card span-9">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot blue"></span>CONDITIONAL VOLATILITY + LOG RETURNS</div>
+                        <div class="card-meta" id="garchAssetLabel">Select an asset →</div>
+                    </div>
+                    <div id="chart-garch" class="chart-area" style="height:420px;"></div>
+                </div>
+                <!-- Drawdown chart -->
+                <div class="glass-card chart-card span-12">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot danger"></span>ROLLING DRAWDOWN — OPTIMAL PORTFOLIO</div>
+                        <div class="card-meta">Maximum drawdown from previous peak</div>
+                    </div>
+                    <div id="chart-drawdown" class="chart-area" style="height:260px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PANEL: MONTE CARLO ===== -->
+        <section class="panel" id="panel-montecarlo">
+            <div class="main-grid">
+                <div class="glass-card chart-card span-12">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <span class="card-dot red"></span>
+                            MONTE CARLO DISTRIBUTION · 10,000 SCENARIOS · 20-DAY HORIZON
+                        </div>
+                        <div class="card-meta" id="mcMeta">—</div>
+                    </div>
+                    <div id="chart-mc-hist" class="chart-area" style="height:420px;"></div>
+                </div>
+                <div class="glass-card chart-card span-6">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot blue"></span>PORTFOLIO VALUE SCENARIOS</div>
+                        <div class="card-meta">Best / Median / Worst path breakdown</div>
+                    </div>
+                    <div id="chart-mc-paths" class="chart-area" style="height:320px;"></div>
+                </div>
+                <div class="glass-card chart-card span-6">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot orange"></span>RISK DECOMPOSITION</div>
+                        <div class="card-meta">Marginal CVaR contribution per asset</div>
+                    </div>
+                    <div id="chart-mc-risk" class="chart-area" style="height:320px;"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+        <span>BVL Institutional Quant Dashboard · GARCH(1,1) Bootstrap Engine · SLSQP Optimizer</span>
+        <span id="lastUpdated">Last run: —</span>
+        <span>Data: Yahoo Finance · 5Y Daily</span>
+    </footer>
+</div>
+
+<script src="/js/app.js"></script>
+
+<!-- Mobile bottom navigation -->
+<nav class="mobile-nav" id="mobileNav" style="display:none">
+    <button class="nav-tab active" data-panel="overview">📊 Overview</button>
+    <button class="nav-tab" data-panel="risk">🔬 Risk</button>
+    <button class="nav-tab" data-panel="montecarlo">🎲 Monte Carlo</button>
+</nav>
+
+</body>
+</html>
