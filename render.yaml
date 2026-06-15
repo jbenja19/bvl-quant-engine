@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: bvl-quant-engine
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python api.py
+    plan: free
