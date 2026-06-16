@@ -40,6 +40,7 @@
             <button class="nav-tab active" data-panel="overview">Overview</button>
             <button class="nav-tab" data-panel="risk">Risk Analytics</button>
             <button class="nav-tab" data-panel="montecarlo">Monte Carlo</button>
+            <button class="nav-tab" data-panel="validation" id="navValidation">Validation &amp; Stress</button>
         </nav>
 
         <div class="topbar-right">
@@ -73,10 +74,10 @@
         <div class="control-group">
             <label class="ctrl-label">ENGINE CONFIG</label>
             <div class="ctrl-tags">
-                <span class="ctrl-tag">GARCH(1,1)</span>
+                <span class="ctrl-tag">GJR-GARCH</span>
                 <span class="ctrl-tag">10K PATHS</span>
-                <span class="ctrl-tag">20D HORIZON</span>
-                <span class="ctrl-tag">SLSQP</span>
+                <span class="ctrl-tag">EWMA λ=0.94</span>
+                <span class="ctrl-tag">CVaR SLSQP</span>
             </div>
         </div>
         <button id="runBtn" class="run-btn">
@@ -258,6 +259,62 @@
                     </div>
                     <div id="chart-mc-risk" class="chart-area" style="height:320px;"></div>
                 </div>
+            </div>
+        </section>
+
+        <!-- ===== PANEL: VALIDATION & STRESS ===== -->
+        <section class="panel" id="panel-validation">
+            <div class="main-grid">
+
+                <!-- VaR Backtesting Chart -->
+                <div class="glass-card chart-card span-12">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot orange"></span>VaR BACKTESTING — WALK-FORWARD VALIDATION (1 YEAR)</div>
+                        <div class="card-meta">VaR estimado vs. retorno real diario · Violaciones marcadas en rojo</div>
+                    </div>
+                    <div style="display:flex; gap:16px; align-items:center; margin:0 20px 12px; flex-wrap:wrap;" id="btAssetSelector"></div>
+                    <div id="chart-backtest" class="chart-area" style="height:320px;"></div>
+                </div>
+
+                <!-- Basel Traffic Light + Kupiec/Christoffersen Stats -->
+                <div class="glass-card chart-card span-4">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot purple"></span>SEMÁFORO BASILEA II/III</div>
+                        <div class="card-meta">Clasificación regulatoria del modelo</div>
+                    </div>
+                    <div id="trafficLight" style="padding:20px;"></div>
+                </div>
+
+                <!-- Test Statistics -->
+                <div class="glass-card chart-card span-8">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot blue"></span>TESTS ESTADÍSTICOS FORMALES</div>
+                        <div class="card-meta">Kupiec POF · Christoffersen Independence · Conditional Coverage</div>
+                    </div>
+                    <div id="btStatsTable" style="padding:20px;"></div>
+                </div>
+
+                <!-- EWMA Dynamic Correlation Heatmap -->
+                <div class="glass-card chart-card span-6">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot red"></span>CORRELACIÓN DINÁMICA EWMA (λ=0.94)</div>
+                        <div class="card-meta">RiskMetrics JP Morgan · Última estimación disponible</div>
+                    </div>
+                    <div id="chart-ewma-corr" class="chart-area" style="height:340px;"></div>
+                </div>
+
+                <!-- Stress Test Table -->
+                <div class="glass-card chart-card span-6">
+                    <div class="card-header">
+                        <div class="card-title"><span class="card-dot danger"></span>STRESS TESTING — ESCENARIOS HISTÓRICOS & PARAMÉTRICOS</div>
+                        <div class="card-meta">Retornos reales aplicados al portafolio óptimo actual</div>
+                    </div>
+                    <div id="stressTestTable" style="padding:12px; overflow-x:auto;"></div>
+                    <div style="text-align:center; margin:10px;">
+                        <button id="runStressBtn" class="run-btn" style="font-size:11px; padding:8px 20px;">RUN STRESS TEST</button>
+                    </div>
+                </div>
+
             </div>
         </section>
 

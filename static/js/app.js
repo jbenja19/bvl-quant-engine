@@ -92,11 +92,11 @@ const loaderMessages = [
     'Downloading BVL market data...',
     'Standardizing to PEN...',
     'Applying liquidity filter...',
-    'Fitting GARCH(1,1) models...',
-    'Running 10,000 Monte Carlo paths...',
+    'Fitting GJR-GARCH models (8 specs/asset)...',
+    'Computing EWMA dynamic correlations...',
+    'Running 10,000 correlated Monte Carlo paths...',
     'Minimizing CVaR via SLSQP...',
     'Building institutional dashboard...',
-    'Almost there...',
 ];
 let msgIdx = 0;
 
@@ -132,10 +132,15 @@ function initNav() {
                     if (btn.dataset.panel === 'overview') renderOverview();
                     if (btn.dataset.panel === 'risk') renderRisk();
                     if (btn.dataset.panel === 'montecarlo') renderMonteCarlo();
+                    if (btn.dataset.panel === 'validation') loadValidationPanel();
                 }
             }
         });
     });
+
+    // Stress test button
+    const stressBtn = document.getElementById('runStressBtn');
+    if (stressBtn) stressBtn.addEventListener('click', runStressTest);
 }
 
 // ── CONTROL BAR ───────────────────────────────────────────────
@@ -877,7 +882,245 @@ async function boot() {
     }
 }
 
+// ── VALIDATION & STRESS PANEL ─────────────────────────────────
+let _btData = null;
+let _btSelectedAsset = null;
+
+async function loadValidationPanel() {
+    // Load EWMA correlation
+    try {
+        const corrResp = await fetch('/api/dynamic-correlation');
+        if (corrResp.ok) {
+            const corrData = await corrResp.json();
+            renderEWMAHeatmap(corrData);
+        }
+    } catch(e) { console.warn('EWMA corr failed:', e); }
+
+    // Load backtesting (can take time — show loading)
+    const btChart = document.getElementById('chart-backtest');
+    if (btChart) btChart.innerHTML = '<div style="color:#8A9BB5; text-align:center; padding:40px; font-size:12px;">⏳ Running walk-forward VaR backtest... (may take a few minutes)</div>';
+    try {
+        const btResp = await fetch(`/api/backtest?confidence=${state.confidence}`);
+        if (btResp.ok) {
+            _btData = await btResp.json();
+            renderBacktestPanel(_btData);
+        } else {
+            if (btChart) btChart.innerHTML = '<div style="color:#F43F5E; text-align:center; padding:40px; font-size:12px;">Error loading backtest data.</div>';
+        }
+    } catch(e) {
+        if (btChart) btChart.innerHTML = `<div style="color:#F43F5E; text-align:center; padding:40px; font-size:12px;">Backtest error: ${e.message}</div>`;
+    }
+}
+
+function renderBacktestPanel(btData) {
+    const assets = Object.keys(btData.assets || {});
+    if (assets.length === 0) return;
+
+    // Asset selector buttons
+    const selector = document.getElementById('btAssetSelector');
+    if (selector) {
+        selector.innerHTML = assets.map((a, i) =>
+            `<button class="seg-btn ${i===0?'active':''}" data-asset="${a}" onclick="selectBtAsset('${a}')">${a.replace('.LM','')}</button>`
+        ).join('');
+    }
+
+    _btSelectedAsset = assets[0];
+    renderBacktestChart(_btSelectedAsset, btData.assets);
+    renderTrafficLight(_btSelectedAsset, btData.assets);
+    renderBtStatsTable(_btSelectedAsset, btData.assets);
+}
+
+function selectBtAsset(ticker) {
+    _btSelectedAsset = ticker;
+    document.querySelectorAll('#btAssetSelector .seg-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.asset === ticker);
+    });
+    if (_btData) {
+        renderBacktestChart(ticker, _btData.assets);
+        renderTrafficLight(ticker, _btData.assets);
+        renderBtStatsTable(ticker, _btData.assets);
+    }
+}
+
+function renderBacktestChart(ticker, assetsData) {
+    const d = assetsData[ticker];
+    if (!d) return;
+
+    const dates = d.dates;
+    const varEst = d.var_estimates.map(v => v * 100);  // to %
+    const actRet = d.actual_returns.map(r => r * 100);
+    const viols = d.violations;
+
+    // Violation markers
+    const violDates = dates.filter((_, i) => viols[i] === 1);
+    const violRets  = actRet.filter((_, i) => viols[i] === 1);
+
+    const traces = [
+        {
+            x: dates, y: actRet,
+            type: 'scatter', mode: 'lines',
+            name: 'Retorno Real',
+            line: { color: THEME.blue, width: 1 },
+        },
+        {
+            x: dates, y: varEst.map(v => -v),
+            type: 'scatter', mode: 'lines',
+            name: 'VaR (−)',
+            line: { color: THEME.orange, width: 1.5, dash: 'dot' },
+        },
+        {
+            x: violDates, y: violRets,
+            type: 'scatter', mode: 'markers',
+            name: 'Violación',
+            marker: { color: THEME.red, size: 7, symbol: 'circle' },
+        },
+    ];
+
+    const layout = {
+        ...baseLayout(),
+        hovermode: 'x unified',
+        xaxis: { ...baseLayout().xaxis, title: '' },
+        yaxis: { ...baseLayout().yaxis, tickformat: '.2f', ticksuffix: '%', title: 'Retorno %' },
+        legend: { ...baseLayout().legend, orientation: 'h', y: 1.08, x: 0 },
+        shapes: [{
+            type: 'line', x0: dates[0], x1: dates[dates.length-1],
+            y0: 0, y1: 0,
+            line: { color: 'rgba(255,255,255,0.1)', width: 1 }
+        }],
+        title: { text: `${ticker} — Walk-Forward VaR Backtest (${d.kupiec.n_violations} violaciones / ${d.kupiec.n_obs} días)`, font: { size: 11, color: '#8A9BB5' }, x: 0.01 }
+    };
+
+    Plotly.newPlot('chart-backtest', traces, layout, plotConfig);
+}
+
+function renderTrafficLight(ticker, assetsData) {
+    const d = assetsData[ticker];
+    if (!d) return;
+    const tl = d.traffic_light;
+    const colorMap = { green: '#10B981', yellow: '#F59E0B', red: '#F43F5E' };
+    const color = colorMap[tl.color] || '#8A9BB5';
+
+    const el = document.getElementById('trafficLight');
+    if (!el) return;
+    el.innerHTML = `
+        <div style="text-align:center;">
+            <div style="width:80px; height:80px; border-radius:50%; background:${color};
+                        margin:0 auto 16px; display:flex; align-items:center; justify-content:center;
+                        font-size:30px; box-shadow: 0 0 30px ${color}60;">
+                ${tl.color === 'green' ? '✅' : tl.color === 'yellow' ? '⚠️' : '❌'}
+            </div>
+            <div style="font-size:18px; font-weight:700; color:${color}; margin-bottom:6px;">${tl.label}</div>
+            <div style="font-size:12px; color:#64748B;">${d.kupiec.n_violations} violaciones en ${d.kupiec.n_obs} días</div>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Mult. capital: ×${tl.capital_multiplier}</div>
+            <hr style="border-color:rgba(255,255,255,0.07); margin:16px 0;">
+            <div style="font-size:10px; color:#8A9BB5; line-height:1.8;">
+                Tasa violaciones: <strong style="color:#F0C040;">${(d.kupiec.violation_rate*100).toFixed(1)}%</strong><br>
+                Esperado: <strong>${(d.kupiec.expected_rate*100).toFixed(1)}%</strong>
+            </div>
+        </div>`;
+}
+
+function renderBtStatsTable(ticker, assetsData) {
+    const d = assetsData[ticker];
+    if (!d) return;
+    const el = document.getElementById('btStatsTable');
+    if (!el) return;
+
+    const rows = [
+        ['Test', 'Estadístico LR', 'p-valor', 'Resultado'],
+        ['Kupiec POF (Cobertura Incond.)', d.kupiec.lr_uc.toFixed(4), d.kupiec.p_value_uc.toFixed(4), d.kupiec.reject_h0_uc ? '❌ Rechazar H₀' : '✅ No rechazar H₀'],
+        ['Christoffersen (Independencia)', d.christoffersen.lr_ind.toFixed(4), d.christoffersen.p_value_ind.toFixed(4), d.christoffersen.reject_h0_ind ? '❌ Violaciones agrupadas' : '✅ Independientes'],
+        ['Cobertura Condicional (CC)', d.conditional_coverage.lr_cc.toFixed(4), d.conditional_coverage.p_value_cc.toFixed(4), d.conditional_coverage.reject ? '❌ Modelo débil' : '✅ Modelo válido'],
+    ];
+
+    el.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:11px;">
+        ${rows.map((r, i) => `<tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+            ${r.map((c, j) => `<${i===0?'th':'td'} style="padding:8px 6px; color:${i===0?'#8A9BB5':j===0?'#C8D8EC':'#F0F4F8'}; text-align:${j===0?'left':'center'};">${c}</${i===0?'th':'td'}>`).join('')}
+        </tr>`).join('')}
+    </table>`;
+}
+
+function renderEWMAHeatmap(corrData) {
+    const { tickers, matrix } = corrData;
+    const shortTickers = tickers.map(t => t.replace('.LM',''));
+
+    const trace = {
+        z: matrix,
+        x: shortTickers, y: shortTickers,
+        type: 'heatmap',
+        colorscale: [
+            [0, '#0F1923'], [0.5, '#1E40AF'], [1, '#F0C040']
+        ],
+        zmin: -1, zmax: 1,
+        text: matrix.map(row => row.map(v => v.toFixed(2))),
+        texttemplate: '%{text}',
+        textfont: { size: 9, color: '#fff' },
+        showscale: true,
+        colorbar: { thickness: 12, len: 0.8, tickfont: { size: 9, color: '#64748B' } }
+    };
+
+    const layout = {
+        ...baseLayout(),
+        margin: { t: 10, r: 80, l: 70, b: 70 },
+        xaxis: { ...baseLayout().xaxis, tickfont: { size: 9 } },
+        yaxis: { ...baseLayout().yaxis, tickfont: { size: 9 }, autorange: 'reversed' },
+    };
+
+    Plotly.newPlot('chart-ewma-corr', [trace], layout, plotConfig);
+}
+
+async function runStressTest() {
+    const btn = document.getElementById('runStressBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Running...'; }
+    const el = document.getElementById('stressTestTable');
+    if (el) el.innerHTML = '<div style="color:#8A9BB5; text-align:center; padding:20px; font-size:12px;">⏳ Descargando datos históricos de crisis...</div>';
+
+    try {
+        const capital = state.capital * 1000;
+        const resp = await fetch(`/api/stress-test?capital=${capital}&confidence=${state.confidence}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        renderStressTable(data.scenarios, capital);
+    } catch(e) {
+        if (el) el.innerHTML = `<div style="color:#F43F5E; padding:20px; font-size:12px;">Error: ${e.message}</div>`;
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = 'RUN STRESS TEST'; }
+    }
+}
+
+function renderStressTable(scenarios, capital) {
+    const el = document.getElementById('stressTestTable');
+    if (!el) return;
+
+    const rows = scenarios.map(s => {
+        const ret = s.cum_return;
+        const pnl = s.pnl_pen;
+        const color = ret === null ? '#8A9BB5' : ret < -0.10 ? '#F43F5E' : ret < -0.05 ? '#F59E0B' : '#10B981';
+        return `<tr style="border-bottom:1px solid rgba(255,255,255,0.04);">
+            <td style="padding:8px 6px; color:#C8D8EC; font-size:10px;">${s.scenario}</td>
+            <td style="padding:8px 6px; color:#8A9BB5; font-size:9px;">${s.period}</td>
+            <td style="padding:8px 6px; color:${color}; font-weight:700; font-size:11px; text-align:right;">
+                ${ret === null ? 'N/A' : (ret*100).toFixed(2)+'%'}
+            </td>
+            <td style="padding:8px 6px; color:${color}; font-size:10px; text-align:right;">
+                ${pnl === null ? 'N/A' : 'S/. '+(pnl).toLocaleString('es-PE', {maximumFractionDigits:0})}
+            </td>
+        </tr>`;
+    });
+
+    el.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:11px;">
+        <thead><tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+            <th style="padding:8px 6px; color:#8A9BB5; text-align:left;">Escenario</th>
+            <th style="padding:8px 6px; color:#8A9BB5; text-align:left;">Período</th>
+            <th style="padding:8px 6px; color:#8A9BB5; text-align:right;">Retorno</th>
+            <th style="padding:8px 6px; color:#8A9BB5; text-align:right;">P&amp;L (PEN)</th>
+        </tr></thead>
+        <tbody>${rows.join('')}</tbody>
+    </table>`;
+}
+
 document.addEventListener('DOMContentLoaded', boot);
+
 
 // ── MOBILE NAV ────────────────────────────────────────────────
 function initMobileNav() {

@@ -114,9 +114,21 @@ def fit_garch_models(prices_pen):
     cond_vols     = pd.DataFrame(index=log_returns.dropna().index)
     garch_models  = {}
 
-    candidate_dists = ["Normal", "t", "skewt", "ged"]
+    # Model competition: (vol_type, o_asymmetric_order, distribution)
+    # GARCH(1,1): standard symmetric
+    # GJR-GARCH(1,1,1): o=1 captures leverage effect (bad news → more vol)
+    candidate_models = [
+        {"o": 0, "dist": "Normal"},
+        {"o": 0, "dist": "t"},
+        {"o": 0, "dist": "skewt"},
+        {"o": 0, "dist": "ged"},
+        {"o": 1, "dist": "Normal"},   # GJR-GARCH variants
+        {"o": 1, "dist": "t"},
+        {"o": 1, "dist": "skewt"},
+        {"o": 1, "dist": "ged"},
+    ]
 
-    print("\n--- Fitting GARCH(1,1) Models (BIC Selection) ---")
+    print("\n--- Fitting GARCH/GJR-GARCH Models (BIC Selection, 8 candidates/asset) ---")
     for t in prices_pen.columns:
         ret_series = log_returns[t].dropna() * 100.0   # scale to %
         ret_clean = ret_series.copy()
@@ -129,16 +141,17 @@ def fit_garch_models(prices_pen):
         best_res = None
         best_dist = None
 
-        print(f"{t:12s} | Testing distributions...")
-        for dist in candidate_dists:
+        print(f"{t:12s} | Testing {len(candidate_models)} models...")
+        for spec in candidate_models:
             try:
                 model = arch_model(
                     ret_clean,
                     mean  = "Constant",
                     vol   = "Garch",
                     p     = 1,
+                    o     = spec["o"],   # 0=GARCH, 1=GJR-GARCH
                     q     = 1,
-                    dist  = dist,
+                    dist  = spec["dist"],
                 )
                 # Suppress convergence warnings to avoid console spam
                 import warnings
@@ -149,9 +162,9 @@ def fit_garch_models(prices_pen):
                 if res.bic < best_bic:
                     best_bic = res.bic
                     best_res = res
-                    best_dist = dist
+                    best_dist = f"{'GJR-' if spec['o']==1 else ''}GARCH-{spec['dist']}"
             except Exception as e:
-                pass # Model failed to converge for this distribution
+                pass # Model failed to converge for this specification
 
         if best_res is not None:
             res = best_res
@@ -163,6 +176,7 @@ def fit_garch_models(prices_pen):
             beta_val   = res.params.get("beta[1]",   np.nan)
             nu_val     = res.params.get("nu",        np.nan)   # df
             lam_val    = res.params.get("lambda",    np.nan)   # skew
+            gamma_val  = res.params.get("gamma[1]",  np.nan)   # GJR leverage term
 
             print(f"{t:12s} | Winner: {best_dist} (BIC: {best_bic:.2f})")
             
@@ -175,8 +189,9 @@ def fit_garch_models(prices_pen):
             cond_vols.loc[common_idx, t]      = res.conditional_volatility.loc[common_idx] / 100.0
 
             # Tag the result object with the best distribution name so the API can read it
-            res.best_dist = best_dist
-            res.best_bic = best_bic
+            res.best_dist  = best_dist
+            res.best_bic   = best_bic
+            res.gamma_val  = float(gamma_val) if not np.isnan(gamma_val) else None
             garch_models[t] = res
         else:
             print(f"{t:12s} | ERROR: All models failed to converge.")

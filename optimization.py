@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from scipy.optimize import minimize
+from dcc import get_cholesky_for_simulation
 
 # ─────────────────────────────────────────────────────────────────
 # CONSTANTS
@@ -13,11 +14,16 @@ RF_DAILY     = (1 + RF_ANNUAL) ** (1 / 252) - 1
 
 
 def simulate_garch_paths(garch_models, std_residuals, n_sims=10000, n_days=20,
-                         block_size=5):
+                         block_size=5, log_returns_for_ewma=None):
     """
     Simulates joint future trajectories of daily log returns over a given horizon
-    using GARCH(1,1) parameter projections and a BLOCK bootstrap of historical
-    standardized residuals (to preserve short-term autocorrelation structure).
+    using GARCH(1,1)/GJR-GARCH parameter projections and a BLOCK bootstrap of
+    historical standardized residuals (to preserve short-term autocorrelation).
+
+    EWMA Cholesky Correlation: If log_returns_for_ewma is provided, the simulated
+    i.i.d. residual blocks are transformed by the Cholesky factor of the latest
+    EWMA correlation matrix (λ=0.94), introducing realistic time-varying
+    cross-asset correlations into the Monte Carlo paths.
 
     All internal computation is done in the ×100 scale used by the arch library,
     with a final /100 conversion to decimal returns.
@@ -37,6 +43,17 @@ def simulate_garch_paths(garch_models, std_residuals, n_sims=10000, n_days=20,
     """
     tickers   = list(garch_models.keys())
     n_assets  = len(tickers)
+
+    # ── EWMA Cholesky (time-varying correlations) ─────────────────────────
+    if log_returns_for_ewma is not None:
+        try:
+            # Align to available tickers in the right order
+            lr_aligned = log_returns_for_ewma[tickers]
+            L_chol = get_cholesky_for_simulation(lr_aligned)
+        except Exception:
+            L_chol = np.eye(n_assets)   # fallback: identity (no cross-correlation)
+    else:
+        L_chol = np.eye(n_assets)
 
     # ── Extract GARCH parameters (arch library uses ×100 scale internally) ──
     # Parameters: omega is in (%²), mu is in (%), alpha/beta are dimensionless
@@ -99,7 +116,9 @@ def simulate_garch_paths(garch_models, std_residuals, n_sims=10000, n_days=20,
         current_sigma  = np.sqrt(current_sigma2)
 
         # Simulated innovation: eps_t = sigma_t * z_t  (% scale)
-        z_t            = z_draws[h]                     # (n_sims, n_assets)
+        z_raw          = z_draws[h]                     # (n_sims, n_assets) i.i.d. raw
+        # Apply EWMA Cholesky to introduce cross-asset correlation
+        z_t            = z_raw @ L_chol.T              # (n_sims, n_assets) correlated
         current_epsilon = current_sigma * z_t
 
         # Simulated log return: r_t = mu + eps_t  (% scale)
