@@ -130,16 +130,16 @@ advanced numerical optimization, all deployed as a real-time institutional web s
 The system adopts a decoupled three-tier architecture:
 
 \begin{center}
-\begin{tabular}{p{3cm} p{12.5cm}}
+\begin{tabular}{l l}
 \toprule
 \textbf{Layer} & \textbf{Description} \\
 \midrule
-\textbf{Data} & \texttt{data\_pipeline.py} --- Download and cleaning of 15 BVL assets (5 years, Yahoo Finance). \\[3pt]
-\textbf{Econometrics} & \texttt{econometrics.py}, \texttt{dcc.py} --- GJR-GARCH modeling, BIC selection (8 specs/asset), EWMA correlations. \\[3pt]
-\textbf{Optimization} & \texttt{optimization.py} --- Monte Carlo Simulation with Block Bootstrap + Cholesky EWMA. CVaR minimization via SLSQP. \\[3pt]
-\textbf{Validation} & \texttt{backtesting.py}, \texttt{stress\_testing.py} --- Kupiec and Christoffersen tests, and 6 historical stress scenarios. \\[3pt]
-\textbf{API} & \texttt{api.py} — FastAPI with TTL caching. Ultra-fast endpoints optimized for millisecond responses: \texttt{/api/calculate}, \texttt{/api/backtest}, \texttt{/api/stress-test}. \\[4pt]
-\textbf{Frontend} & \texttt{static/} — Interactive dashboard with Plotly.js. 4 panels: Overview, Risk Analytics, Monte Carlo, Validation \& Stress. \\
+\textbf{Data} & \parbox[t]{12.5cm}{\texttt{data\_pipeline.py} --- Download and cleaning of 15 BVL assets (5 years, Yahoo Finance).} \\[3pt]
+\textbf{Econometrics} & \parbox[t]{12.5cm}{\texttt{econometrics.py}, \texttt{dcc.py} --- GJR-GARCH modeling, BIC selection (8 specs/asset), EWMA correlations.} \\[3pt]
+\textbf{Optimization} & \parbox[t]{12.5cm}{\texttt{optimization.py} --- Monte Carlo Simulation with Block Bootstrap + Cholesky EWMA. CVaR minimization via SLSQP.} \\[3pt]
+\textbf{Validation} & \parbox[t]{12.5cm}{\texttt{backtesting.py}, \texttt{stress\_testing.py} --- Kupiec and Christoffersen tests, and 6 historical stress scenarios.} \\[3pt]
+\textbf{API} & \parbox[t]{12.5cm}{\texttt{api.py} — FastAPI with TTL caching. Ultra-fast endpoints optimized for millisecond responses: \texttt{/api/calculate}, \texttt{/api/backtest}, \texttt{/api/stress-test}.} \\[4pt]
+\textbf{Frontend} & \parbox[t]{12.5cm}{\texttt{static/} — Interactive dashboard with Plotly.js. 4 panels: Overview, Risk Analytics, Monte Carlo, Validation \& Stress.} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -412,16 +412,16 @@ complement this by evaluating losses in extraordinary crises whose historical re
 are applied directly to the current optimal portfolio.
 
 \begin{center}
-\begin{tabular}{p{4cm} p{3cm} p{8.5cm}}
+\begin{tabular}{l l l}
 \toprule
 \textbf{Scenario} & \textbf{Period} & \textbf{Description} \\
 \midrule
-COVID-19 Crash & Feb--Mar 2020 & Largest monthly market drop since 1987. Global supply chain halt. \\[3pt]
-Global Financial Crisis & Sep--Nov 2008 & Lehman Brothers collapse. Global credit contraction and emerging market sell-off. \\[3pt]
-Commodities Crash & Jun--Dec 2015 & China slowdown. Copper drop $>$30\%. Severe impact on mining-heavy BVL. \\[3pt]
-Peru Political Crisis & Jun--Jul 2022 & Castillo government. Mining nationalization proposals caused capital flight. \\[3pt]
-Copper Shock $-$25\% & Parametric & Empirical copper beta $\approx 0.85$ applied to SCCO.LM and BVN.LM. \\[3pt]
-FX Shock $+$15\% & Parametric & PEN depreciation. USD-denominated assets appreciate in PEN. \\
+COVID-19 Crash & Feb--Mar 2020 & \parbox[t]{8.5cm}{Largest monthly market drop since 1987. Global supply chain halt.} \\[3pt]
+Global Financial Crisis & Sep--Nov 2008 & \parbox[t]{8.5cm}{Lehman Brothers collapse. Global credit contraction and emerging market sell-off.} \\[3pt]
+Commodities Crash & Jun--Dec 2015 & \parbox[t]{8.5cm}{China slowdown. Copper drop $>$30\%. Severe impact on mining-heavy BVL.} \\[3pt]
+Peru Political Crisis & Jun--Jul 2022 & \parbox[t]{8.5cm}{Castillo government. Mining nationalization proposals caused capital flight.} \\[3pt]
+Copper Shock $-$25\% & Parametric & \parbox[t]{8.5cm}{Empirical copper beta $\approx 0.85$ applied to SCCO.LM and BVN.LM.} \\[3pt]
+FX Shock $+$15\% & Parametric & \parbox[t]{8.5cm}{PEN depreciation. USD-denominated assets appreciate in PEN.} \\
 \bottomrule
 \end{tabular}
 \end{center}

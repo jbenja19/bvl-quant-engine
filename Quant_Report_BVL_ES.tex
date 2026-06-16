@@ -130,16 +130,16 @@ optimización numérica avanzada, todo desplegado como un servicio web instituci
 El sistema adopta una arquitectura de tres capas desacopladas:
 
 \begin{center}
-\begin{tabular}{l p{12cm}}
+\begin{tabular}{l l}
 \toprule
 \textbf{Capa} & \textbf{Descripción} \\
 \midrule
-\textbf{Datos} & \texttt{data\_pipeline.py} — Descarga y limpieza de 15 activos BVL (5 años, Yahoo Finance). \\[4pt]
-\textbf{Econometría} & \texttt{econometrics.py}, \texttt{dcc.py} — Modelado GJR-GARCH, selección BIC, correlaciones EWMA. \\[4pt]
-\textbf{Optimización} & \texttt{optimization.py} — Simulación Monte Carlo con Block Bootstrap + Cholesky EWMA. Minimización CVaR via SLSQP. \\[4pt]
-\textbf{Validación} & \texttt{backtesting.py}, \texttt{stress\_testing.py} — Tests de Kupiec, Christoffersen y escenarios históricos. \\[4pt]
-\textbf{API} & \texttt{api.py} — FastAPI con caché TTL. Endpoints ultra-rápidos optimizados para respuestas en milisegundos: \texttt{/api/calculate}, \texttt{/api/backtest}, \texttt{/api/stress-test}. \\[4pt]
-\textbf{Frontend} & \texttt{static/} — Dashboard interactivo con Plotly.js. 4 paneles: Overview, Risk Analytics, Monte Carlo, Validation \& Stress. \\
+\textbf{Datos} & \parbox[t]{12.5cm}{\texttt{data\_pipeline.py} — Descarga y limpieza de 15 activos BVL (5 años, Yahoo Finance).} \\[4pt]
+\textbf{Econometría} & \parbox[t]{12.5cm}{\texttt{econometrics.py}, \texttt{dcc.py} — Modelado GJR-GARCH, selección BIC, correlaciones EWMA.} \\[4pt]
+\textbf{Optimización} & \parbox[t]{12.5cm}{\texttt{optimization.py} — Simulación Monte Carlo con Block Bootstrap + Cholesky EWMA. Minimización CVaR via SLSQP.} \\[4pt]
+\textbf{Validación} & \parbox[t]{12.5cm}{\texttt{backtesting.py}, \texttt{stress\_testing.py} — Tests de Kupiec, Christoffersen y escenarios históricos.} \\[4pt]
+\textbf{API} & \parbox[t]{12.5cm}{\texttt{api.py} — FastAPI con caché TTL. Endpoints ultra-rápidos optimizados para respuestas en milisegundos: \texttt{/api/calculate}, \texttt{/api/backtest}, \texttt{/api/stress-test}.} \\[4pt]
+\textbf{Frontend} & \parbox[t]{12.5cm}{\texttt{static/} — Dashboard interactivo con Plotly.js. 4 paneles: Overview, Risk Analytics, Monte Carlo, Validation \& Stress.} \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -418,16 +418,16 @@ complementan esto evaluando pérdidas en crisis extraordinarias cuyos retornos h
 son aplicados directamente al portafolio óptimo actual.
 
 \begin{center}
-\begin{tabular}{l l p{9cm}}
+\begin{tabular}{l l l}
 \toprule
 \textbf{Escenario} & \textbf{Período} & \textbf{Descripción} \\
 \midrule
-COVID-19 Crash & Feb--Mar 2020 & Mayor caída bursátil mensual desde 1987. Paralización global de cadenas de suministro. \\[4pt]
-Crisis Financiera Global & Sep--Nov 2008 & Colapso de Lehman Brothers. Contracción del crédito global y venta masiva de activos emergentes. \\[4pt]
-Desplome de Commodities & Jun--Dic 2015 & Desaceleración de China. Caída del cobre $>$30\%. Impacto severo en BVL minera. \\[4pt]
-Crisis Política Perú & Jun--Jul 2022 & Inicio del gobierno Castillo. Propuestas de nationalización minera generaron salida de capitales. \\[4pt]
-Shock Cobre $-$25\% & Paramétrico & Aplicación de beta empírico cobre $\approx 0.85$ a SCCO.LM y BVN.LM. \\[4pt]
-Shock FX $+$15\% & Paramétrico & Depreciación del sol. Activos USD-denominados aprecian en PEN. \\
+COVID-19 Crash & Feb--Mar 2020 & \parbox[t]{8.5cm}{Mayor caída bursátil mensual desde 1987. Paralización global de cadenas de suministro.} \\[4pt]
+Crisis Financiera Global & Sep--Nov 2008 & \parbox[t]{8.5cm}{Colapso de Lehman Brothers. Contracción del crédito global y venta masiva de activos emergentes.} \\[4pt]
+Desplome de Commodities & Jun--Dic 2015 & \parbox[t]{8.5cm}{Desaceleración de China. Caída del cobre $>$30\%. Impacto severo en BVL minera.} \\[4pt]
+Crisis Política Perú & Jun--Jul 2022 & \parbox[t]{8.5cm}{Inicio del gobierno Castillo. Propuestas de nationalización minera generaron salida de capitales.} \\[4pt]
+Shock Cobre $-$25\% & Paramétrico & \parbox[t]{8.5cm}{Aplicación de beta empírico cobre $\approx 0.85$ a SCCO.LM y BVN.LM.} \\[4pt]
+Shock FX $+$15\% & Paramétrico & \parbox[t]{8.5cm}{Depreciación del sol. Activos USD-denominados aprecian en PEN.} \\
 \bottomrule
 \end{tabular}
 \end{center}
