@@ -18,6 +18,7 @@
 \usepackage{enumitem}
 \usepackage{mdframed}
 \usepackage{tcolorbox}
+\usepackage{tcolorbox}
 
 % ── Colors ────────────────────────────────────────────────────────
 \definecolor{darkblue}{RGB}{15, 30, 60}
@@ -129,9 +130,9 @@ optimización numérica avanzada, todo desplegado como un servicio web instituci
 El sistema adopta una arquitectura de tres capas desacopladas:
 
 \begin{center}
-\begin{tabular}{p{3.2cm} p{10.6cm}}
+\begin{tabular}{p{3cm} p{12.5cm}}
 \toprule
-\multicolumn{1}{c}{\textbf{Capa}} & \multicolumn{1}{c}{\textbf{Descripción}} \\
+\textbf{Capa} & \textbf{Descripción} \\
 \midrule
 \textbf{Datos} & \texttt{data\_pipeline.py} — Descarga y limpieza de 15 activos BVL (5 años, Yahoo Finance). \\[4pt]
 \textbf{Econometría} & \texttt{econometrics.py}, \texttt{dcc.py} — Modelado GJR-GARCH, selección BIC, correlaciones EWMA. \\[4pt]
@@ -417,9 +418,9 @@ complementan esto evaluando pérdidas en crisis extraordinarias cuyos retornos h
 son aplicados directamente al portafolio óptimo actual.
 
 \begin{center}
-\begin{tabular}{p{3.8cm} p{2.2cm} p{6.8cm}}
+\begin{tabular}{p{4cm} p{3cm} p{8.5cm}}
 \toprule
-\multicolumn{1}{c}{\textbf{Escenario}} & \multicolumn{1}{c}{\textbf{Período}} & \multicolumn{1}{c}{\textbf{Descripción}} \\
+\textbf{Escenario} & \textbf{Período} & \textbf{Descripción} \\
 \midrule
 COVID-19 Crash & Feb--Mar 2020 & Mayor caída bursátil mensual desde 1987. Paralización global de cadenas de suministro. \\[4pt]
 Crisis Financiera Global & Sep--Nov 2008 & Colapso de Lehman Brothers. Contracción del crédito global y venta masiva de activos emergentes. \\[4pt]

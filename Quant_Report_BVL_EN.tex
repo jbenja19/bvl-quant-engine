@@ -19,6 +19,7 @@
 \usepackage{mdframed}
 \usepackage{tcolorbox}
 
+
 % ── Colors ────────────────────────────────────────────────────────
 \definecolor{darkblue}{RGB}{15, 30, 60}
 \definecolor{accentgold}{RGB}{212, 168, 67}
@@ -129,9 +130,9 @@ advanced numerical optimization, all deployed as a real-time institutional web s
 The system adopts a decoupled three-tier architecture:
 
 \begin{center}
-\begin{tabular}{p{3.2cm} p{10.6cm}}
+\begin{tabular}{p{3cm} p{12.5cm}}
 \toprule
-\multicolumn{1}{c}{\textbf{Layer}} & \multicolumn{1}{c}{\textbf{Description}} \\
+\textbf{Layer} & \textbf{Description} \\
 \midrule
 \textbf{Data} & \texttt{data\_pipeline.py} --- Download and cleaning of 15 BVL assets (5 years, Yahoo Finance). \\[3pt]
 \textbf{Econometrics} & \texttt{econometrics.py}, \texttt{dcc.py} --- GJR-GARCH modeling, BIC selection (8 specs/asset), EWMA correlations. \\[3pt]
@@ -411,11 +412,9 @@ complement this by evaluating losses in extraordinary crises whose historical re
 are applied directly to the current optimal portfolio.
 
 \begin{center}
-\begin{tabular}{p{3.8cm} p{2.2cm} p{6.8cm}}
+\begin{tabular}{p{4cm} p{3cm} p{8.5cm}}
 \toprule
-\multicolumn{1}{c}{\textbf{Scenario}} &
-\multicolumn{1}{c}{\textbf{Period}} &
-\multicolumn{1}{c}{\textbf{Description}} \\
+\textbf{Scenario} & \textbf{Period} & \textbf{Description} \\
 \midrule
 COVID-19 Crash & Feb--Mar 2020 & Largest monthly market drop since 1987. Global supply chain halt. \\[3pt]
 Global Financial Crisis & Sep--Nov 2008 & Lehman Brothers collapse. Global credit contraction and emerging market sell-off. \\[3pt]
