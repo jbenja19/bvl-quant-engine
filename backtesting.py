@@ -243,7 +243,8 @@ def run_var_backtest(log_returns: pd.DataFrame,
                 forecasts = res.forecast(horizon=1, start=asset_test_start)
                 
             # Extract the out-of-sample variance sequence
-            oos_var = forecasts.variance["h.1"].iloc[asset_test_start:]
+            # arch .forecast() might return only the forecasted rows or the full index with NaNs. dropna() is robust.
+            oos_var = forecasts.variance["h.1"].dropna()
             mu_1d_pct = res.params.get("mu", 0.0)
 
             # Determine the critical value (z_q) for VaR

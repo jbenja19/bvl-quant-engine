@@ -90,6 +90,52 @@ def filter_assets_by_volume(prices_pen, volume_pen, threshold=50_000.0):
     return prices_pen[valid_tickers], volume_pen[valid_tickers], valid_tickers
 
 
+CANDIDATE_MODELS = [
+    {"o": 0, "dist": "ged"},     # Often wins for symmetrical heavy tails
+    {"o": 1, "dist": "t"},       # Often wins for asymmetric leverage + heavy tails
+]
+
+def fit_single_asset(args):
+    import warnings
+    import numpy as np
+    from arch import arch_model
+    
+    ticker, ret_clean = args
+    best_bic = float('inf')
+    best_res = None
+    best_dist = None
+
+    print(f"{ticker:<12} | Testing {len(CANDIDATE_MODELS)} models...")
+    for spec in CANDIDATE_MODELS:
+        try:
+            model = arch_model(
+                ret_clean,
+                mean  = "Constant",
+                vol   = "Garch",
+                p     = 1,
+                o     = spec["o"],
+                q     = 1,
+                dist  = spec["dist"],
+            )
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=Warning)
+                res = model.fit(disp="off", options={"maxiter": 500})
+            
+            if res.bic < best_bic:
+                best_bic = res.bic
+                best_res = res
+                best_dist = f"{'GJR-' if spec['o']==1 else ''}GARCH-{spec['dist']}"
+        except Exception:
+            pass
+            
+    if best_res is not None:
+        std_resid = best_res.resid / best_res.conditional_volatility
+        cond_vol = best_res.conditional_volatility / 100.0
+        gamma_val = best_res.params.get("gamma[1]", float('nan'))
+        return ticker, best_res, best_dist, best_bic, std_resid, cond_vol, gamma_val
+    return ticker, None, None, None, None, None, None
+
+
 def fit_garch_models(prices_pen):
     """
     Fits GARCH(1,1) models to daily log returns testing multiple distributions:
@@ -114,84 +160,33 @@ def fit_garch_models(prices_pen):
     cond_vols     = pd.DataFrame(index=log_returns.dropna().index)
     garch_models  = {}
 
-    # Model competition: (vol_type, o_asymmetric_order, distribution)
-    # GARCH(1,1): standard symmetric
-    # GJR-GARCH(1,1,1): o=1 captures leverage effect (bad news → more vol)
-    candidate_models = [
-        {"o": 0, "dist": "Normal"},
-        {"o": 0, "dist": "t"},
-        {"o": 0, "dist": "skewt"},
-        {"o": 0, "dist": "ged"},
-        {"o": 1, "dist": "Normal"},   # GJR-GARCH variants
-        {"o": 1, "dist": "t"},
-        {"o": 1, "dist": "skewt"},
-        {"o": 1, "dist": "ged"},
-    ]
+    # Candidate models are now defined globally as CANDIDATE_MODELS
 
     print("\n--- Fitting GARCH/GJR-GARCH Models (BIC Selection, 8 candidates/asset) ---")
+    
+    args_list = []
     for t in prices_pen.columns:
         ret_series = log_returns[t].dropna() * 100.0   # scale to %
-        ret_clean = ret_series.copy()
-
-        if len(ret_clean) < 60:
-            print(f"{t:12s} | SKIPPED — insufficient observations ({len(ret_clean)})")
+        if len(ret_series) < 60:
+            print(f"{t:12s} | SKIPPED — insufficient observations ({len(ret_series)})")
             continue
+        args_list.append((t, ret_series))
 
-        best_bic = float('inf')
-        best_res = None
-        best_dist = None
-
-        print(f"{t:12s} | Testing {len(candidate_models)} models...")
-        for spec in candidate_models:
-            try:
-                model = arch_model(
-                    ret_clean,
-                    mean  = "Constant",
-                    vol   = "Garch",
-                    p     = 1,
-                    o     = spec["o"],   # 0=GARCH, 1=GJR-GARCH
-                    q     = 1,
-                    dist  = spec["dist"],
-                )
-                # Suppress convergence warnings to avoid console spam
-                import warnings
-                with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", category=Warning)
-                    res = model.fit(disp="off", options={"maxiter": 500})
-                
-                if res.bic < best_bic:
-                    best_bic = res.bic
-                    best_res = res
-                    best_dist = f"{'GJR-' if spec['o']==1 else ''}GARCH-{spec['dist']}"
-            except Exception as e:
-                pass # Model failed to converge for this specification
-
-        if best_res is not None:
-            res = best_res
-            alpha_pval = res.pvalues.get("alpha[1]", np.nan)
-            beta_pval  = res.pvalues.get("beta[1]",  np.nan)
-            mu_val     = res.params.get("mu",        np.nan)
-            omega_val  = res.params.get("omega",     np.nan)
-            alpha_val  = res.params.get("alpha[1]",  np.nan)
-            beta_val   = res.params.get("beta[1]",   np.nan)
-            nu_val     = res.params.get("nu",        np.nan)   # df
-            lam_val    = res.params.get("lambda",    np.nan)   # skew
-            gamma_val  = res.params.get("gamma[1]",  np.nan)   # GJR leverage term
-
+    results = []
+    for arg in args_list:
+        results.append(fit_single_asset(arg))
+        
+    for t, res, best_dist, best_bic, std_resid, cond_vol, gamma_val in results:
+        if res is not None:
             print(f"{t:12s} | Winner: {best_dist} (BIC: {best_bic:.2f})")
             
-            # Standardized residuals: z_t = eps_t / sigma_t (scale-free)
-            std_resid = res.resid / res.conditional_volatility
-
-            # Align to the common index (drop leading NaN dates)
             common_idx = std_residuals.index.intersection(std_resid.index)
             std_residuals.loc[common_idx, t]  = std_resid.loc[common_idx]
-            cond_vols.loc[common_idx, t]      = res.conditional_volatility.loc[common_idx] / 100.0
-
-            # Tag the result object with the best distribution name so the API can read it
-            res.best_dist  = best_dist
-            res.best_bic   = best_bic
-            res.gamma_val  = float(gamma_val) if not np.isnan(gamma_val) else None
+            cond_vols.loc[common_idx, t]      = cond_vol.loc[common_idx]
+            
+            res.best_dist = best_dist
+            res.best_bic = best_bic
+            res.gamma_val = float(gamma_val) if not np.isnan(gamma_val) else None
             garch_models[t] = res
         else:
             print(f"{t:12s} | ERROR: All models failed to converge.")
