@@ -5,8 +5,8 @@ import numpy as np
 def get_bvl_data():
     """
     Downloads daily Close price and Volume for the 15 most representative BVL tickers
-    for the last 5 years. Cleans the data by forward-filling prices and setting 
-    volume to 0 on non-trading days.
+    for the last 5 years. Non-trading day prices are left as NaN (NOT forward-filled)
+    so that GARCH models see only real market sessions. Volume is set to 0 on those days.
     """
     tickers = [
         "BAP.LM", "SCCO.LM", "BVN.LM", "IFS.LM", "ALICORC1.LM",
