@@ -913,6 +913,11 @@ async function loadValidationPanel() {
     }
 }
 
+function formatStatus(passed) {
+    if (passed) return '<span style="color:#10B981; font-weight:600;">PASS (Fail to Reject H0)</span>';
+    return '<span style="color:#F43F5E; font-weight:600;">FAIL (Reject H0)</span>';
+}
+
 function renderBacktestPanel(btData) {
     const assets = Object.keys(btData.assets || {});
     if (assets.length === 0) return;
@@ -960,7 +965,7 @@ function renderBacktestChart(ticker, assetsData) {
         {
             x: dates, y: actRet,
             type: 'scatter', mode: 'lines',
-            name: 'Retorno Real',
+            name: 'Actual Return',
             line: { color: THEME.blue, width: 1 },
         },
         {
@@ -972,7 +977,7 @@ function renderBacktestChart(ticker, assetsData) {
         {
             x: violDates, y: violRets,
             type: 'scatter', mode: 'markers',
-            name: 'Violación',
+            name: 'Violation',
             marker: { color: THEME.red, size: 7, symbol: 'circle' },
         },
     ];
@@ -981,14 +986,14 @@ function renderBacktestChart(ticker, assetsData) {
         ...baseLayout(),
         hovermode: 'x unified',
         xaxis: { ...baseLayout().xaxis, title: '' },
-        yaxis: { ...baseLayout().yaxis, tickformat: '.2f', ticksuffix: '%', title: 'Retorno %' },
+        yaxis: { ...baseLayout().yaxis, tickformat: '.2f', ticksuffix: '%', title: 'Return %' },
         legend: { ...baseLayout().legend, orientation: 'h', y: 1.08, x: 0 },
         shapes: [{
             type: 'line', x0: dates[0], x1: dates[dates.length-1],
             y0: 0, y1: 0,
             line: { color: 'rgba(255,255,255,0.1)', width: 1 }
         }],
-        title: { text: `${ticker} — Walk-Forward VaR Backtest (${d.kupiec.n_violations} violaciones / ${d.kupiec.n_obs} días)`, font: { size: 11, color: '#8A9BB5' }, x: 0.01 }
+        title: { text: `${ticker} — Walk-Forward VaR Backtest (${d.kupiec.n_violations} violations / ${d.kupiec.n_obs} days)`, font: { size: 11, color: '#8A9BB5' }, x: 0.01 }
     };
 
     Plotly.newPlot('chart-backtest', traces, layout, plotConfig);
@@ -1001,6 +1006,14 @@ function renderTrafficLight(ticker, assetsData) {
     const colorMap = { green: '#10B981', yellow: '#F59E0B', red: '#F43F5E' };
     const color = colorMap[tl.color] || '#8A9BB5';
 
+    let titleText = 'Green';
+    if (tl.color === 'yellow') titleText = 'Yellow';
+    if (tl.color === 'red') titleText = 'Red';
+
+    let descText = 'Safe Zone';
+    if (tl.color === 'yellow') descText = 'Caution';
+    if (tl.color === 'red') descText = 'Red Alert';
+
     const el = document.getElementById('trafficLight');
     if (!el) return;
     el.innerHTML = `
@@ -1010,13 +1023,13 @@ function renderTrafficLight(ticker, assetsData) {
                         font-size:30px; box-shadow: 0 0 30px ${color}60;">
                 ${tl.color === 'green' ? '✅' : tl.color === 'yellow' ? '⚠️' : '❌'}
             </div>
-            <div style="font-size:18px; font-weight:700; color:${color}; margin-bottom:6px;">${tl.label}</div>
-            <div style="font-size:12px; color:#64748B;">${d.kupiec.n_violations} violaciones en ${d.kupiec.n_obs} días</div>
-            <div style="font-size:11px; color:#64748B; margin-top:4px;">Mult. capital: ×${tl.capital_multiplier}</div>
+            <div style="font-size:18px; font-weight:700; color:${color}; margin-bottom:6px;">${titleText}</div>
+            <div style="font-size:12px; color:#64748B;">${d.kupiec.n_violations} violations in ${d.kupiec.n_obs} days</div>
+            <div style="font-size:11px; color:#64748B; margin-top:4px;">Capital multiplier: ×${tl.capital_multiplier}</div>
             <hr style="border-color:rgba(255,255,255,0.07); margin:16px 0;">
             <div style="font-size:10px; color:#8A9BB5; line-height:1.8;">
-                Tasa violaciones: <strong style="color:#F0C040;">${(d.kupiec.violation_rate*100).toFixed(1)}%</strong><br>
-                Esperado: <strong>${(d.kupiec.expected_rate*100).toFixed(1)}%</strong>
+                Violation rate: <strong style="color:#F0C040;">${(d.kupiec.violation_rate*100).toFixed(1)}%</strong><br>
+                Expected: <strong>${(d.kupiec.expected_rate*100).toFixed(1)}%</strong>
             </div>
         </div>`;
 }
@@ -1028,10 +1041,10 @@ function renderBtStatsTable(ticker, assetsData) {
     if (!el) return;
 
     const rows = [
-        ['Test', 'Estadístico LR', 'p-valor', 'Resultado'],
-        ['Kupiec POF (Cobertura Incond.)', d.kupiec.lr_uc.toFixed(4), d.kupiec.p_value_uc.toFixed(4), d.kupiec.reject_h0_uc ? '❌ Rechazar H₀' : '✅ No rechazar H₀'],
-        ['Christoffersen (Independencia)', d.christoffersen.lr_ind.toFixed(4), d.christoffersen.p_value_ind.toFixed(4), d.christoffersen.reject_h0_ind ? '❌ Violaciones agrupadas' : '✅ Independientes'],
-        ['Cobertura Condicional (CC)', d.conditional_coverage.lr_cc.toFixed(4), d.conditional_coverage.p_value_cc.toFixed(4), d.conditional_coverage.reject ? '❌ Modelo débil' : '✅ Modelo válido'],
+        ['Test', 'LR Statistic', 'p-value', 'Result'],
+        ['Kupiec POF (Uncond.)', d.kupiec.lr_uc.toFixed(4), d.kupiec.p_value_uc.toFixed(4), formatStatus(!d.kupiec.reject_h0_uc)],
+        ['Christoffersen (Indep.)', d.christoffersen.lr_ind.toFixed(4), d.christoffersen.p_value_ind.toFixed(4), d.christoffersen.reject_h0_ind ? '❌ Clustered' : '✅ Independent'],
+        ['Conditional Coverage (CC)', d.conditional_coverage.lr_cc.toFixed(4), d.conditional_coverage.p_value_cc.toFixed(4), d.conditional_coverage.reject ? '❌ Weak Model' : '✅ Valid Model'],
     ];
 
     el.innerHTML = `<table style="width:100%; border-collapse:collapse; font-size:11px;">
