@@ -903,6 +903,7 @@ async function loadValidationPanel() {
         const btResp = await fetch(`/api/backtest?confidence=${state.confidence}`);
         if (btResp.ok) {
             _btData = await btResp.json();
+            if (btChart) btChart.innerHTML = ''; // Clear loading text before rendering
             renderBacktestPanel(_btData);
         } else {
             if (btChart) btChart.innerHTML = '<div style="color:#F43F5E; text-align:center; padding:40px; font-size:12px;">Error loading backtest data.</div>';
