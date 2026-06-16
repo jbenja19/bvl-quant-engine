@@ -174,18 +174,21 @@ def basel_traffic_light(n_violations: int, n_obs: int = 250) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def run_var_backtest(log_returns: pd.DataFrame,
+                     garch_models: dict,
                      confidence: float = 0.95,
                      train_window: int = 504,
                      test_window: int = 252) -> dict:
     """
-    Walk-forward VaR backtesting on each asset individually.
+    Fast Walk-forward VaR backtesting on each asset individually.
 
-    For each day t in the test window, fits GARCH(1,1) on the
-    preceding `train_window` days and computes 1-day VaR.
-    Then checks whether the actual return violated the VaR.
+    Uses the best selected GARCH specification from the cache to perform a 
+    pseudo-out-of-sample forecast. It fits the model on the train window, 
+    and uses the estimated parameters to filter the out-of-sample data, 
+    generating 1-step-ahead VaR predictions for the test window.
 
     Args:
         log_returns  (pd.DataFrame): Full log return history, decimal scale.
+        garch_models (dict):         Cached models dict from API containing winning specs.
         confidence   (float):        VaR confidence level.
         train_window (int):          Trading days for GARCH training (~2 years).
         test_window  (int):          Days to backtest (~1 year).
@@ -202,92 +205,110 @@ def run_var_backtest(log_returns: pd.DataFrame,
 
     test_start = T - test_window
 
-    candidate_dists = ["t", "skewt"]   # Faster: only best candidates for walk-forward
-
     for ticker in clean.columns:
         ret_series = clean[ticker].dropna()
         if len(ret_series) < train_window + test_window:
             continue
+            
+        if ticker not in garch_models:
+            continue
+            
+        # Get the cached winning specification for this asset
+        cached_res = garch_models[ticker]
+        dist_name = getattr(cached_res, "best_dist", "t")
+        
+        if "GJR" in dist_name:
+            o_param = 1
+        else:
+            o_param = 0
+            
+        dist = dist_name.split("-")[-1]
 
-        var_estimates = []
-        violations    = []
-        test_dates    = []
+        # Ensure correct indices relative to the individual asset series length
+        asset_T = len(ret_series)
+        asset_test_start = asset_T - test_window
+        data_pct = ret_series * 100.0
 
-        for t in range(test_start, T):
-            train_data = ret_series.iloc[t - train_window: t] * 100.0
+        try:
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore")
+                
+                # Setup model with the winning specs
+                model = arch_model(data_pct, vol="GARCH", p=1, o=o_param, q=1, dist=dist, mean="Constant")
+                
+                # Fit the model up to the start of the test window
+                res = model.fit(last_obs=asset_test_start, disp="off", options={"maxiter": 300})
+                
+                # Generate 1-step-ahead out-of-sample forecasts
+                forecasts = res.forecast(horizon=1, start=asset_test_start)
+                
+            # Extract the out-of-sample variance sequence
+            oos_var = forecasts.variance["h.1"].iloc[asset_test_start:]
+            mu_1d_pct = res.params.get("mu", 0.0)
 
-            best_bic = float("inf")
-            best_var = np.nan
+            # Determine the critical value (z_q) for VaR
+            if dist == "t":
+                nu  = res.params.get("nu", 5.0)
+                z_q = stats.t.ppf(1 - confidence, df=nu)
+            elif dist == "skewt":
+                nu  = res.params.get("nu", 5.0)
+                z_q = stats.t.ppf(1 - confidence, df=nu)
+            else:
+                z_q = stats.norm.ppf(1 - confidence)
 
-            for dist in candidate_dists:
-                try:
-                    with warnings.catch_warnings():
-                        warnings.filterwarnings("ignore")
-                        model = arch_model(train_data, vol="GARCH", p=1, o=1, q=1, dist=dist, mean="Constant")
-                        res   = model.fit(disp="off", options={"maxiter": 300})
+            var_estimates = []
+            violations    = []
+            test_dates    = []
+            actual_rets   = []
 
-                    if res.bic < best_bic:
-                        best_bic = res.bic
-                        # 1-step-ahead conditional vol forecast
-                        forecast = res.forecast(horizon=1, reindex=False)
-                        sigma_1d_pct = np.sqrt(forecast.variance.iloc[-1, 0])
-                        mu_1d_pct    = res.params.get("mu", 0.0)
+            # Iterate through the out-of-sample period
+            for i in range(len(oos_var)):
+                idx = asset_test_start + i
+                if idx >= asset_T: 
+                    break
+                
+                sigma_1d_pct = np.sqrt(oos_var.iloc[i])
+                var_1d = -(mu_1d_pct + z_q * sigma_1d_pct) / 100.0
+                
+                actual_ret = ret_series.iloc[idx]
+                violation  = int(-actual_ret > var_1d)
+                
+                var_estimates.append(var_1d)
+                violations.append(violation)
+                test_dates.append(ret_series.index[idx])
+                actual_rets.append(actual_ret)
 
-                        # Parametric VaR in decimal
-                        if dist == "t":
-                            nu  = res.params.get("nu", 5.0)
-                            z_q = stats.t.ppf(1 - confidence, df=nu)
-                        elif dist == "skewt":
-                            nu  = res.params.get("nu", 5.0)
-                            lam = res.params.get("lambda", 0.0)
-                            # Approximation: use t quantile (small skew effect at 5%)
-                            z_q = stats.t.ppf(1 - confidence, df=nu)
-                        else:
-                            z_q = stats.norm.ppf(1 - confidence)
-
-                        var_1d = -(mu_1d_pct + z_q * sigma_1d_pct) / 100.0
-                        best_var = var_1d
-
-                except Exception:
-                    continue
-
-            if np.isnan(best_var):
+            if len(violations) == 0:
                 continue
 
-            actual_ret = ret_series.iloc[t]
-            violation  = int(-actual_ret > best_var)
+            violations_arr = np.array(violations)
+            var_arr        = np.array(var_estimates)
+            actual_rets    = np.array(actual_rets)
 
-            var_estimates.append(best_var)
-            violations.append(violation)
-            test_dates.append(ret_series.index[t])
+            kupiec   = kupiec_pof_test(violations_arr, confidence)
+            christo  = christoffersen_independence_test(violations_arr)
+            traffic  = basel_traffic_light(int(violations_arr.sum()), len(violations_arr))
 
-        if len(violations) == 0:
+            lr_cc    = kupiec["lr_uc"] + christo["lr_ind"]
+            p_cc     = 1 - stats.chi2.cdf(lr_cc, df=2)
+
+            results[ticker] = {
+                "dates":            [str(d)[:10] for d in test_dates],
+                "var_estimates":    [round(float(v), 6) for v in var_arr],
+                "actual_returns":   [round(float(r), 6) for r in actual_rets],
+                "violations":       [int(x) for x in violations],
+                "kupiec":           kupiec,
+                "christoffersen":   christo,
+                "conditional_coverage": {
+                    "lr_cc":      round(lr_cc, 4),
+                    "p_value_cc": round(p_cc, 4),
+                    "reject":     bool(p_cc < 0.05),
+                },
+                "traffic_light":    traffic,
+            }
+            
+        except Exception as e:
+            print(f"[BACKTEST] Skipping {ticker} due to error: {e}")
             continue
-
-        violations_arr = np.array(violations)
-        var_arr        = np.array(var_estimates)
-        actual_rets    = clean[ticker].iloc[test_start:T].values[:len(violations)]
-
-        kupiec   = kupiec_pof_test(violations_arr, confidence)
-        christo  = christoffersen_independence_test(violations_arr)
-        traffic  = basel_traffic_light(int(violations_arr.sum()), len(violations_arr))
-
-        lr_cc    = kupiec["lr_uc"] + christo["lr_ind"]
-        p_cc     = 1 - stats.chi2.cdf(lr_cc, df=2)
-
-        results[ticker] = {
-            "dates":            [str(d)[:10] for d in test_dates],
-            "var_estimates":    [round(float(v), 6) for v in var_arr],
-            "actual_returns":   [round(float(r), 6) for r in actual_rets],
-            "violations":       [int(x) for x in violations],
-            "kupiec":           kupiec,
-            "christoffersen":   christo,
-            "conditional_coverage": {
-                "lr_cc":     round(lr_cc, 4),
-                "p_value_cc": round(p_cc, 4),
-                "reject":    bool(p_cc < 0.05),
-            },
-            "traffic_light":    traffic,
-        }
 
     return results

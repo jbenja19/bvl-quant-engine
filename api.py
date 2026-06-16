@@ -244,7 +244,7 @@ async def backtest_var(confidence: float = 0.95):
         # Only backtest assets with enough history
         lr_subset = log_returns[valid_assets].dropna(how="all", axis=1)
         print(f"[BACKTEST] Running walk-forward VaR backtest for {len(lr_subset.columns)} assets...")
-        results = run_var_backtest(lr_subset, confidence=confidence)
+        results = run_var_backtest(lr_subset, garch_models=_cache["garch_models"], confidence=confidence)
         print("[BACKTEST] Complete.")
         return {"confidence": confidence, "assets": results}
     except Exception as e:
